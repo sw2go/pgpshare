@@ -1,0 +1,305 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="index.css">
+  <style>html {font-family:courier, courier new, serif;}</style>
+ 
+  <title>Read input file in chunks</title>
+  <script src="https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.0.2/dist/ponyfill.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/streamsaver@2.0.3/StreamSaver.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/openpgp@5.0.0/dist/openpgp.min.js" ></script>
+  <script src="aes.js"></script>
+  <script src="chunky.js"></script>
+  <script src="key-value-db.js"></script>
+  
+  <script>const streamSaver = window.streamSaver</script>
+</head>
+<body>
+	<div id="Login_Page">
+		<div class="head">
+			<h1>PGP Share</h1>
+		</div>	
+		<div>
+			<h2>Login</h2>
+			<label for="user">User</label>
+			<input type="text" name="user" id="user" value="test@test.ch"><br>
+			<label for="password">Password</label>
+			<input type="password" name="password" id="password" value="123">
+			<p></p>
+			<button class="login" onclick="login(document.getElementById('user').value, document.getElementById('password').value)">Login</button>
+			<button class="login" onclick="createAccount(document.getElementById('user').value, document.getElementById('password').value)">Register</button>
+		</div>
+		<div>
+			<h2>Register</h2>		
+		</div>
+		<p>To create a new account enter desired credentials and click 'register'.</p>
+		
+	</div>
+	<div id="Main_Page">
+		<div class="head">
+			<h1>PGP share</h1> 
+			<button onclick="displayPage('ChangePassword_Page')">Change password</button>
+			<button id="logout" onclick="displayPage('Login_Page')">Logout</button>
+		</div>		
+		<div>
+			<h2>Download file</h2>
+			<p>Enter the name of a file that has been shared with you</p>
+			<label for="downloadFile"></label>
+			<input type="text" name="downloadFile" id="downloadFile" value="">
+			<div class="loadCommand">
+				<span class="item">
+					<button  onclick="downloadChunkedFile(document.getElementById('downloadFile').value, document.getElementById('user').value, document.getElementById('password').value)">Download</button>
+				</span>				
+				<span id="decryptionProgress" class="progress">-</span>
+			</div>
+			
+		</div>
+		<div>
+			<h2>Upload file</h2>
+			<p>Enter one or more users and choose a file you want to share with them</p>
+			<label for="recipient"></label>
+			<input type="text" name="recipient" id="recipient" value="test@test.ch">
+			<div class="loadCommand">
+				<span class="item">
+					<input type="file" id="uploadFile" onchange="uploadChunkedFile(document.getElementById('uploadFile').files[0], document.getElementById('recipient').value )" />
+				</span>
+				<span id="encryptionProgress" class="progress">-</span>
+			</div>
+		</div>
+
+	</div>
+	<div id="ChangePassword_Page">
+		<div class="head">
+			<h1 onclick="displayPage('Main_Page')">< Change password</h1>
+			<button id="logout" onclick="displayPage('Login_Page')">Logout</button>
+		</div>
+		<label for="changeUser">User</label>
+		<input type="text" name="changeUser" id="changeUser" value="">
+		<label for="changePassword">Password</label>
+		<input type="password" name="changePassword" id="changePassword" value="">
+		<label for="changeNewPassword">New password</label>
+		<input type="password" name="changeNewPassword" id="changeNewPassword" value="">
+		<button onclick="changePassword(document.getElementById('changeUser').value, document.getElementById('changePassword').value, document.getElementById('changeNewPassword').value)">Change password</button>
+	</div>
+  <script>
+    
+
+	function displayPage(pageId) {
+		console.log("page: " + pageId);
+		
+		[...document.querySelectorAll("div[id$='_Page']")].forEach( div => {
+			div.style.display = (div.id == pageId) ? 'block' : 'none';	
+		});
+		
+		if (pageId == "Login_Page") {
+			authenticated(undefined, undefined);
+		}
+		else if (pageId == "ChangePassword_Page") {
+			let input = document.getElementById('changeUser');
+			input.value = sessionStorage.getItem('userId');
+			input.readOnly = true;
+		}
+	}
+	
+	displayPage("Login_Page");
+	  
+	
+	async function login(userId, password) {		
+		try {
+			let encryptedPassphrase = await chunky.downloadKey(userId, "pass");
+			let keyParams = AES().getKeyParams(encryptedPassphrase);
+			let derivedKey = await AES().generatePBKDF2(password, undefined, keyParams);
+			await AES().decryptByKey(encryptedPassphrase, derivedKey);		
+			console.log("login succeeded");
+            authenticated(userId, derivedKey);
+			displayPage("Main_Page");
+			
+		} catch (error) {
+			console.log("login failed", error);
+			alert("Invalid user/password");
+		}
+	}
+	
+	async function authenticated(userId, derivedKey) {
+	
+          if (derivedKey) {
+			  sessionStorage.setItem('userId', userId);
+			  await KeyValueDB.set(userId, derivedKey)
+          } 
+		  else {
+			  let current = sessionStorage.getItem('userId');
+			  sessionStorage.clear();
+			  if (current) {
+			    await KeyValueDB.remove(current);
+			  }
+		  }
+	} 
+	  
+	async function changePassword(userId, oldPassword, newPassword) {
+		try {
+
+			console.log(userId);
+
+			const oldEncryptedPassphrase = await chunky.downloadKey(userId, "pass");
+			const oldKeyParams = AES().getKeyParams(oldEncryptedPassphrase);
+			const oldDerivedKey = await AES().generatePBKDF2(oldPassword, undefined, oldKeyParams);
+			const passphrase = await AES().decryptByKey(oldEncryptedPassphrase, oldDerivedKey);
+			
+			// New password-derived key
+			const keyParams = { iterations: 1000000, salt: crypto.getRandomValues(new Uint8Array(32)) };
+			const derivedKey = await AES().generatePBKDF2(newPassword, undefined, keyParams);					
+			const iv = crypto.getRandomValues(new Uint8Array(12));		
+			const encryptedPassphrase = AES().setKeyParams(keyParams, await AES().encryptByKey(passphrase, derivedKey, iv));
+			
+			await chunky.uploadKey(userId, encryptedPassphrase, "pass");
+			
+			await KeyValueDB.set(userId, derivedKey);
+			
+			console.log("password change succeeded");
+			displayPage("Main_Page");
+		} catch (error) {
+			console.log("login failed", error);
+			alert("password change failed");
+		}		
+	}	
+	
+	async function createAccount(userId, password) {
+		
+		try {
+			let test = await chunky.downloadKey(userId, "pass");
+			alert('account already exists');
+			return;
+		}
+		catch(error) {
+			// ok account does not jet exists
+		}
+		
+		try {
+			// New PGP public/private keys
+			const userInfo = { name: userId, email: userId };
+			const passphrase = AES().generatePassphrase();		
+			const pgpKey = await openpgp.generateKey({
+				type: 'rsa', // Type of the key
+				rsaBits: 4096, // RSA key size (defaults to 4096 bits)
+				userIDs: [userInfo], // you can pass multiple user IDs
+				passphrase: passphrase // protects the private key
+			});
+			
+			// New password-derived key
+			const keyParams = { iterations: 1000000, salt: crypto.getRandomValues(new Uint8Array(32)) };
+			const derivedKey = await AES().generatePBKDF2(password, undefined, keyParams);
+			const iv = crypto.getRandomValues(new Uint8Array(12));		
+			const encryptedPassphrase = AES().setKeyParams(keyParams, await AES().encryptByKey(passphrase, derivedKey, iv));
+			
+			await chunky.uploadKey(userId, pgpKey.privateKey, "private");
+			await chunky.uploadKey(userId, pgpKey.publicKey, "public");
+			await chunky.uploadKey(userId, encryptedPassphrase, "pass");
+			
+			console.log("Account created");			
+			authenticated(userId, derivedKey);
+			displayPage("Main_Page");
+		}
+		catch (error) {
+			alert("failed");
+		}
+	
+	}
+	
+	 function deleteFile() {
+        let xhr = new XMLHttpRequest();
+        xhr.open('DELETE', '/api/files/*');
+        xhr.send();
+	  }
+
+	
+	
+	async function uploadChunkedFile(file, recipientsString) {
+	
+		const recipients = recipientsString.trim().split(/[ ,;]+/);
+	
+		const publicKeys = await Promise.all(recipients.map(recipient => chunky.downloadKey(recipient, "public")));
+	
+		let progress = 0;		
+		document.getElementById('encryptionProgress').innerText = progress.toString() + " bytes encrypted";
+	
+		const options = { 
+			chunkSize: 4 * 1024 * 1024, 
+			encoder: (block) => { 
+			
+				progress += block.length;
+				document.getElementById('encryptionProgress').innerText = progress.toString() + " bytes encrypted";
+			
+				return encryptor(block, publicKeys); 
+			}  
+		}
+	
+		chunky.upload(file, options);
+	}
+		
+	// Download file
+	async function downloadChunkedFile(fileName, userId) {
+	
+	
+		try {
+			const privateKey = await chunky.downloadKey(userId, "private");
+			const encryptedPassphrase = await chunky.downloadKey(userId, "pass");
+			const derivedKey = await KeyValueDB.get(userId);
+		
+			const passphrase = await AES().decryptByKey(encryptedPassphrase, derivedKey); 
+	
+			let progress = 0;
+			document.getElementById('decryptionProgress').innerText = progress.toString() + " bytes decrypted";
+			
+			const options = { 
+				decoder: async (block) =>  { 
+					console.log(block.length);
+
+					let decrypted = await decryptor(block, privateKey, passphrase);
+					
+					progress += decrypted.length;
+					document.getElementById('decryptionProgress').innerText = progress.toString() + " bytes decrypted";
+					
+					return decrypted;
+				}
+			}
+		
+			chunky.download(fileName, options);
+		
+		} catch(error) {
+			console.log("download failed", error);
+		}
+		
+	}
+	
+	async function encryptor(block, publicKeysArmored) {	
+			
+		const publicKeys = await Promise.all(publicKeysArmored.map(armoredKey => openpgp.readKey({ armoredKey })));
+	
+		encrypted = await openpgp.encrypt({
+			message: await openpgp.createMessage({ binary: block }),
+			encryptionKeys: publicKeys,
+			//signingKeys: privateKey, // optional,
+			format: 'binary',
+			config: { preferredCompressionAlgorithm: openpgp.enums.compression.zlib }
+		});		
+				
+		return encrypted;
+	}
+	
+	async function decryptor(block, privateKeyArmored, passphrase) {	
+
+		const { data: decrypted, signatures } = await openpgp.decrypt({
+			message: await openpgp.readMessage({ binaryMessage: block }),
+			decryptionKeys: await openpgp.decryptKey({ privateKey: await openpgp.readPrivateKey({ armoredKey: privateKeyArmored }), passphrase: passphrase }),
+			format: 'binary' // output as Uint8Array
+		});
+		
+		return decrypted;
+	}
+		
+  </script>
+  
+</body>
+</html>
