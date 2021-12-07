@@ -1,24 +1,28 @@
 var KeyValueDB = (function () {
 	
+	window.indexedDB = window.indexedDB || window.webkitIndexedDB || window.mozIndexedDB || window.msIndexedDB;
+	
 	const dbName    = 'KeyValueDB';
 	const dbVersion = 1;
 	const storeName = 'KeyValueStore';
 		
 	const dbconnect = window.indexedDB.open(dbName, dbVersion);
-	dbconnect.onupgradeneeded = ev => {
-	  const db = ev.target.result;
-	  const store = db.createObjectStore(storeName, { keyPath: 'key', autoIncrement: false });
-	  //store.createIndex('name', 'email', { unique: false });
+	
+	dbconnect.onerror = ev => {
+	  console.log(dbName + ' failed', ev);
+	  alert("IndexedDB failed");
 	}
 	
 	dbconnect.onsuccess = ev => {
 	  console.log(dbName + ' ready');
 	}
 	
-	dbconnect.onerror = ev => {
-	  console.log(dbName + ' failed');
+	dbconnect.onupgradeneeded = ev => {
+	  const db = ev.target.result;
+	  const store = db.createObjectStore(storeName, { keyPath: 'key', autoIncrement: false });
+	  //store.createIndex('name', 'email', { unique: false });
 	}
-		
+	
 	function insertOrUpdateItem(key, value) {
 		return new Promise(function(resolve, reject) {
 			const dbconnect = window.indexedDB.open(dbName, dbVersion);
@@ -48,7 +52,7 @@ var KeyValueDB = (function () {
 				const store = transaction.objectStore(storeName);
 				const request = store.get(key);
 				request.onerror = reject;
-				request.onsuccess = ev => resolve(request.result?.value);
+				request.onsuccess = ev => resolve( (request.result && request.result.value) ? request.result.value : undefined);
 			}
 		});
 	}

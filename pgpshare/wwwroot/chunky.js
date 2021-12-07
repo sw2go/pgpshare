@@ -4,8 +4,8 @@ var chunky = (function () {
 			
 	function uploadFileInChunks(file, options) {
 		
-		let encoder    = (options?.encoder)   ? options.encoder   : function(block) { return block; };
-		let chunkSize  = (options?.chunkSize) ? options.chunkSize : 4 * 1024 * 1024;		
+		let encoder    = (options && options.encoder) ? options.encoder : function(block) { return block; };
+		let chunkSize  = (options && options.chunkSize) ? options.chunkSize : 4 * 1024 * 1024;		
 		let fileSize   = file.size;
 		let offset     = 0;
 		let part       = 0;
@@ -41,7 +41,7 @@ var chunky = (function () {
 				console.log("Done reading file");
 				return;
 			}
-		}
+		};
 
 		// start reading the first block from the file
 		reader.readAsArrayBuffer(file.slice(0, chunkSize));
@@ -49,7 +49,7 @@ var chunky = (function () {
 	
 	function downloadFileInChunks(fileName, options) {
 		
-		const decoder    = (options?.decoder)   ? options.decoder   : function(block) { return block; };
+		const decoder = (options && options.decoder) ? options.decoder : function(block) { return block; };
 		
 		const fileStream = streamSaver.createWriteStream(fileName, {
 			//size: 22, // (optional) Will show progress

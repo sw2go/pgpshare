@@ -8,13 +8,13 @@
  
   <title>Read input file in chunks</title>
   <script src="https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.0.2/dist/ponyfill.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/streamsaver@2.0.3/StreamSaver.min.js"></script>
+  <script src="/streamSaver/StreamSaver.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/openpgp@5.0.0/dist/openpgp.min.js" ></script>
   <script src="aes.js"></script>
   <script src="chunky.js"></script>
   <script src="key-value-db.js"></script>
   
-  <script>const streamSaver = window.streamSaver</script>
+  <script>const streamSaver = window.streamSaver; streamSaver.mitm ='/streamSaver/mitm.html'</script>
 </head>
 <body>
 	<div id="Login_Page">

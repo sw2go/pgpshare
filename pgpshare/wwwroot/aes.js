@@ -5,10 +5,10 @@ function AES() {
   
   aes.generatePBKDF2 = async (password, passwordBits, keyParams, usage) => {
   
-	let pass;
-	let saltValue = keyParams?.salt || crypto.getRandomValues(new Uint8Array(32));
-    let rounds = keyParams?.iterations || 500000;
-    let usageArray = usage || ['encrypt', 'decrypt'];
+	let pass = undefined;
+	let saltValue = (keyParams && keyParams.salt) ? keyParams.salt : crypto.getRandomValues(new Uint8Array(32));
+    let rounds = (keyParams && keyParams.iterations) ? keyParams.iterations : 500000;
+    let usageArray = (usage) ? usage : ['encrypt', 'decrypt'];
     
     if (password) {
       pass = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), {
