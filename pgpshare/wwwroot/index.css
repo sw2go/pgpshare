@@ -5,32 +5,49 @@ label {
 }
 
 h2 {
-	margin-top: 48px;
+	margin-top: 16px;
 }
 
 .head {
 	display: flex;
 	align-items: center;
+	flex-wrap: wrap;
 }
 
 .head > h1 {
-	flex: 1;
+	width: 50px;
+	flex: 1 1;
+	
 }
 
 .loadCommand {
 	display: flex;
 	align-items: center;
-	margin-top: 16px;
+	flex-wrap: wrap;
 }
 
 .loadCommand > .item {
-	width: 300px;	
+	margin-top: 16px;
+	width: 250px;	
 }
 .loadCommand > .progress {
-	flex: 1;	
+	font-weight: bold;
+	margin-left: 16px;
+	margin-top: 16px;
+	flex: 1;
 }
 
+.loading {
+	color: orange;
+}
 
+.complete {
+	color: green;
+}
+
+.failed {
+	color: red;
+}
 
 #logout {
 	margin: 16px;

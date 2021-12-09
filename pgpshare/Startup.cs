@@ -78,12 +78,14 @@ namespace ApiTest
 
             //app.UseAuthorization();
 
+            app.UseDefaultFiles();
             app.UseStaticFiles();
 
             app.UseDirectoryBrowser(new DirectoryBrowserOptions
             {
+                
                 FileProvider = new PhysicalFileProvider(
-                    Path.Combine(env.WebRootPath, "files")), RequestPath = "/files"
+                    Path.Combine(env.WebRootPath, "data")), RequestPath = "/data"
             });
 
             app.UseEndpoints(endpoints =>

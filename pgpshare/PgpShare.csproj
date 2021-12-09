@@ -17,7 +17,8 @@
   <ItemGroup>
     <Folder Include="Data\Entities\" />
     <Folder Include="Data\External\" />
-    <Folder Include="wwwroot\keys\" />
+    <Folder Remove="wwwroot\data\files" />
+    <Folder Remove="wwwroot\data\keys" />
   </ItemGroup>
 
 

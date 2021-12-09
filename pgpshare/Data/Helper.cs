@@ -24,8 +24,8 @@ namespace ApiTest.Data
 
         public Helper(IWebHostEnvironment webHostEnvironment)
         {
-            FilesPath = Path.Combine(webHostEnvironment.WebRootPath, "files");
-            KeysPath = Path.Combine(webHostEnvironment.WebRootPath, "keys");
+            FilesPath = Path.Combine(webHostEnvironment.WebRootPath, "data/files");
+            KeysPath = Path.Combine(webHostEnvironment.WebRootPath, "data/keys");
 
             CurrentNLogFilePath = Path.Combine(webHostEnvironment.WebRootPath, string.Format("nlog-own-{0}.log", DateTime.Now.ToString("yyyy-MM-dd")));
             AppLogFilePath = Path.Combine(webHostEnvironment.WebRootPath, "app.log");

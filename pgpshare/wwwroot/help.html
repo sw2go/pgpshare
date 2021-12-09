@@ -1,0 +1,43 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="index.css">
+  <style>html {font-family:courier, courier new, serif;}</style>
+ 
+  <title>PGP Share</title>
+</head>
+<body>
+	<div id="Login_Page">
+		<div class="head">
+			<h1>PGP Share Help</h1>
+		</div>
+		<div>
+		<h2>Browse</h2>
+			<a href="/data">Data</a>
+		</div>
+		<div>
+			<h2>Clear</h2>
+			<p>Delete all files on the server</p>
+			<button class="login" onclick="deleteAllFiles()">User Files</button>
+			<button class="login" onclick="deleteAllKeys()">User Keys</button>
+		</div>		
+	</div>
+	<script>
+	
+	function deleteAllFiles() {
+        let xhr = new XMLHttpRequest();
+        xhr.open('DELETE', '/api/files/*');
+        xhr.send();
+	}
+	
+	function deleteAllKeys() {
+        let xhr = new XMLHttpRequest();
+        xhr.open('DELETE', '/api/keys/*');
+        xhr.send();
+	}
+
+    </script>
+</body>
+</html>

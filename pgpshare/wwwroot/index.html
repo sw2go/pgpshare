@@ -39,8 +39,8 @@
 	</div>
 	<div id="Main_Page">
 		<div class="head">
-			<h1>PGP share</h1> 
-			<button onclick="displayPage('ChangePassword_Page')">Change password</button>
+			<h1>PGP Share</h1> 
+			<button onclick="displayPage('ChangePassword_Page')">Change Pwd</button>
 			<button id="logout" onclick="displayPage('Login_Page')">Logout</button>
 		</div>		
 		<div>
@@ -72,7 +72,7 @@
 	</div>
 	<div id="ChangePassword_Page">
 		<div class="head">
-			<h1 onclick="displayPage('Main_Page')">< Change password</h1>
+			<h1 onclick="displayPage('Main_Page')">< Change Pwd</h1>
 			<button id="logout" onclick="displayPage('Login_Page')">Logout</button>
 		</div>
 		<label for="changeUser">User</label>
@@ -81,7 +81,7 @@
 		<input type="password" name="changePassword" id="changePassword" value="">
 		<label for="changeNewPassword">New password</label>
 		<input type="password" name="changeNewPassword" id="changeNewPassword" value="">
-		<button onclick="changePassword(document.getElementById('changeUser').value, document.getElementById('changePassword').value, document.getElementById('changeNewPassword').value)">Change password</button>
+		<button onclick="changePassword(document.getElementById('changeUser').value, document.getElementById('changePassword').value, document.getElementById('changeNewPassword').value)">Change Pwd</button>
 	</div>
   <script>
     
@@ -108,7 +108,7 @@
 	
 	async function login(userId, password) {		
 		try {
-			let encryptedPassphrase = await chunky.downloadKey(userId, "pass");
+			let encryptedPassphrase = await chunky.downloadString(userId, "pass");
 			let keyParams = AES().getKeyParams(encryptedPassphrase);
 			let derivedKey = await AES().generatePBKDF2(password, undefined, keyParams);
 			await AES().decryptByKey(encryptedPassphrase, derivedKey);		
@@ -142,7 +142,7 @@
 
 			console.log(userId);
 
-			const oldEncryptedPassphrase = await chunky.downloadKey(userId, "pass");
+			const oldEncryptedPassphrase = await chunky.downloadString(userId, "pass");
 			const oldKeyParams = AES().getKeyParams(oldEncryptedPassphrase);
 			const oldDerivedKey = await AES().generatePBKDF2(oldPassword, undefined, oldKeyParams);
 			const passphrase = await AES().decryptByKey(oldEncryptedPassphrase, oldDerivedKey);
@@ -153,7 +153,7 @@
 			const iv = crypto.getRandomValues(new Uint8Array(12));		
 			const encryptedPassphrase = AES().setKeyParams(keyParams, await AES().encryptByKey(passphrase, derivedKey, iv));
 			
-			await chunky.uploadKey(userId, encryptedPassphrase, "pass");
+			await chunky.uploadString(userId, "pass", encryptedPassphrase);
 			
 			await KeyValueDB.set(userId, derivedKey);
 			
@@ -168,7 +168,7 @@
 	async function createAccount(userId, password) {
 		
 		try {
-			let test = await chunky.downloadKey(userId, "pass");
+			let test = await chunky.downloadString(userId, "pass");
 			alert('account already exists');
 			return;
 		}
@@ -193,9 +193,9 @@
 			const iv = crypto.getRandomValues(new Uint8Array(12));		
 			const encryptedPassphrase = AES().setKeyParams(keyParams, await AES().encryptByKey(passphrase, derivedKey, iv));
 			
-			await chunky.uploadKey(userId, pgpKey.privateKey, "private");
-			await chunky.uploadKey(userId, pgpKey.publicKey, "public");
-			await chunky.uploadKey(userId, encryptedPassphrase, "pass");
+			await chunky.uploadString(userId, "private", pgpKey.privateKey);
+			await chunky.uploadString(userId, "public", pgpKey.publicKey);
+			await chunky.uploadString(userId, "pass", encryptedPassphrase);
 			
 			console.log("Account created");			
 			authenticated(userId, derivedKey);
@@ -211,64 +211,79 @@
         let xhr = new XMLHttpRequest();
         xhr.open('DELETE', '/api/files/*');
         xhr.send();
-	  }
+	 }
 
 	
-	
+	// Upload file
 	async function uploadChunkedFile(file, recipientsString) {
 	
-		const recipients = recipientsString.trim().split(/[ ,;]+/);
+		try {
+			progessInfo('encryptionProgress', 'loading', 'Start');
 	
-		const publicKeys = await Promise.all(recipients.map(recipient => chunky.downloadKey(recipient, "public")));
-	
-		let progress = 0;		
-		document.getElementById('encryptionProgress').innerText = progress.toString() + " bytes encrypted";
-	
-		const options = { 
-			chunkSize: 4 * 1024 * 1024, 
-			encoder: (block) => { 
-			
-				progress += block.length;
-				document.getElementById('encryptionProgress').innerText = progress.toString() + " bytes encrypted";
-			
-				return encryptor(block, publicKeys); 
-			}  
+			const recipients = recipientsString.trim().split(/[ ,;]+/);
+		
+			const publicKeys = await Promise.all(recipients.map(recipient => chunky.downloadString(recipient, "public")));
+		
+			let progress = 0;		
+			progessInfo('encryptionProgress', 'loading', progress.toString() + "  encrypted");
+		
+			const options = { 
+				chunkSize: 4 * 1024 * 1024, 
+				encoder: (block) => { 
+					
+					progress += block.length;
+					progessInfo('encryptionProgress', 'loading', progress.toString() + "  encrypted");
+					
+					return encryptor(block, publicKeys); 
+				}  
+			}
+		
+			chunky.uploadFile(file, options).then( x => {
+				progessInfo('encryptionProgress', 'complete', progress.toString() + " completed");
+			}).catch(error => {
+				progessInfo('encryptionProgress', 'failed', error);	
+			});
+		
+		} catch (error) {
+			progessInfo('encryptionProgress', 'failed', error);			
 		}
-	
-		chunky.upload(file, options);
 	}
 		
 	// Download file
 	async function downloadChunkedFile(fileName, userId) {
-	
-	
-		try {
-			const privateKey = await chunky.downloadKey(userId, "private");
-			const encryptedPassphrase = await chunky.downloadKey(userId, "pass");
-			const derivedKey = await KeyValueDB.get(userId);
-		
+			
+		try {			
+			progessInfo('decryptionProgress', 'loading', 'Start');
+			
+			const privateKey = await chunky.downloadString(userId, "private");
+			const encryptedPassphrase = await chunky.downloadString(userId, "pass");
+			
+			const derivedKey = await KeyValueDB.get(userId);		
 			const passphrase = await AES().decryptByKey(encryptedPassphrase, derivedKey); 
 	
 			let progress = 0;
-			document.getElementById('decryptionProgress').innerText = progress.toString() + " bytes decrypted";
+			progessInfo('decryptionProgress', 'loading', progress.toString() + "  decrypted");
 			
 			const options = { 
-				decoder: async (block) =>  { 
-					console.log(block.length);
+				decoder: async (block) =>  {
 
 					let decrypted = await decryptor(block, privateKey, passphrase);
 					
 					progress += decrypted.length;
-					document.getElementById('decryptionProgress').innerText = progress.toString() + " bytes decrypted";
+					progessInfo('decryptionProgress', 'loading', progress.toString() + "  decrypted");
 					
 					return decrypted;
 				}
 			}
 		
-			chunky.download(fileName, options);
+			chunky.downloadFile(fileName, options).then( x => {
+				progessInfo('decryptionProgress', 'complete', progress.toString() + "  completed");
+			}).catch(error => {
+				progessInfo('decryptionProgress', 'failed', error);
+			});;
 		
 		} catch(error) {
-			console.log("download failed", error);
+			progessInfo('decryptionProgress', 'failed', error);
 		}
 		
 	}
@@ -298,7 +313,16 @@
 		
 		return decrypted;
 	}
-		
+	
+	function progessInfo(tag, className, text) {
+		let elem = document.getElementById(tag);
+		elem.classList.remove("failed");
+		elem.classList.remove("complete");
+		elem.classList.remove("loading");
+		elem.classList.add(className);
+		elem.innerText = text;
+	}
+	
   </script>
   
 </body>

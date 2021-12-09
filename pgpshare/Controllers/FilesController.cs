@@ -48,8 +48,6 @@ namespace PgpShare.Controllers
             }            
         }
 
-
-
         [HttpPost]
         [Route("{filename}/{part}")]
         public async Task CreateBlock(string filename, int part)
@@ -102,9 +100,6 @@ namespace PgpShare.Controllers
                     await stream.CopyToAsync(Response.Body);
                 }
             }
-
-
         }
-
     }
 }

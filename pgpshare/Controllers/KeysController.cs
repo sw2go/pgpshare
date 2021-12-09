@@ -24,6 +24,20 @@ namespace PgpShare.Controllers
             return (part == null) ? Path.Combine(helper.KeysPath, fileName) : Path.Combine(helper.KeysPath, fileName, part);
         }
 
+        [HttpDelete]
+        [Route("{filename}")]
+        public async Task Delete(string filename)
+        {
+            if (filename == "*")
+            {
+                if (Directory.Exists(helper.KeysPath))
+                {
+                    Directory.Delete(helper.KeysPath, true);
+                }
+                Directory.CreateDirectory(helper.KeysPath);
+            }
+        }
+
         [HttpPost]
         [Route("{name}/{part}")]
         public async Task CreateKey(string name, string part)
