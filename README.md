@@ -8,6 +8,9 @@ File sharing with end-to-end encryption
 - crypto-key storage in IndexedDB
 - crypto.subtle Password derivedKeys for passphrase en/decryption on client-side
 - unlimited file size for up- and download (transfer in chunks)
+- change password support
+- Browsing of files and keys via /help.html
+- Deleting of files and keys via /help.html 
 
 Dependencies:
 - openPGP.js
