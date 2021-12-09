@@ -21,6 +21,7 @@ VisualStudio > Project > Publish to folder
 
 Target-System:
 Set permission for web-server process on wwwroot/data to 'full control'
+When hosted in IIS remove WebDAVModule in web.config (to allow DELETE method)
 
 
 
