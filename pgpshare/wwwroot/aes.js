@@ -3,12 +3,11 @@ function AES() {
 
   let aes = {};
   
-  aes.generatePBKDF2 = async (password, passwordBits, keyParams, usage) => {
+  aes.generatePBKDF2 = async (password, passwordBits, keyParams) => {
   
 	let pass = undefined;
 	let saltValue = (keyParams && keyParams.salt) ? keyParams.salt : crypto.getRandomValues(new Uint8Array(32));
     let rounds = (keyParams && keyParams.iterations) ? keyParams.iterations : 500000;
-    let usageArray = (usage) ? usage : ['encrypt', 'decrypt'];
     
     if (password) {
       pass = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), {
@@ -22,28 +21,35 @@ function AES() {
       }, false, ['deriveBits'])
     }
     
-    let bits = await crypto.subtle.deriveBits({
-      "name": "PBKDF2",
-      "salt": saltValue,
-      "iterations": rounds,
-      "hash": {
-        "name": "SHA-256"
-      }
-    }, pass, 256);
-    
-    return await crypto.subtle.importKey('raw', bits, {
+    return await crypto.subtle.deriveBits({
+		"name": "PBKDF2",
+		"salt": saltValue,
+		"iterations": rounds,
+		"hash": {
+			"name": "SHA-256"
+			}
+		}, pass, 256);
+
+	};
+  
+  aes.createGcmKey = async (bits, usage) => {
+	  
+	  let usageArray = (usage) ? usage : ['encrypt', 'decrypt'];
+	  
+      return await crypto.subtle.importKey('raw', bits, {
       "name": "AES-GCM"
     }, false, usageArray);
-        
-  };
+  }
   
-  aes.encryptByKey = async (message, key, iv) => {
+  
+  aes.gcmEncrypt = async (message, key, iv) => {
   
     let msg = new TextEncoder().encode(message);
 	let ivValue = iv || crypto.getRandomValues(new Uint8Array(12));  	
     let enc = await crypto.subtle.encrypt({
       "name": "AES-GCM",
-      "iv": ivValue
+      "iv": ivValue,
+	  "tagLength": 128
     }, key, msg);
     
     let ivHash = btoa(Array.from(new Uint8Array(ivValue)).map(val => {
@@ -57,7 +63,7 @@ function AES() {
     return ivHash + '.' + encHash;    
   };  
   
-  aes.decryptByKey = async (encrypted, key) => {
+  aes.gcmDecrypt = async (encrypted, key) => {
   
     let parts = encrypted.split('.');
         
@@ -71,7 +77,8 @@ function AES() {
         
     let dec = await crypto.subtle.decrypt({
       "name": "AES-GCM",
-      "iv": iv
+      "iv": iv,
+	  "tagLength": 128
     }, key, enc);
     
     return (new TextDecoder().decode(dec));    
@@ -82,10 +89,11 @@ function AES() {
     let rounds = iterations || 500000;
 
     let salt = crypto.getRandomValues(new Uint8Array(32));
-      let key = await aes.generatePBKDF2(password, passwordBits, { salt: salt, iterations: rounds } , ['encrypt']);
+    let bits = await aes.generatePBKDF2(password, passwordBits, { salt: salt, iterations: rounds });
+	let key  = await aes.createGcmKey(bits,  ['encrypt']);
 		
 	let iv = crypto.getRandomValues(new Uint8Array(12));  	
-    let enc = await aes.encryptByKey(message, key, iv); 
+    let enc = await aes.gcmEncrypt(message, key, iv); 
     
     let iterationsHash = btoa(rounds.toString());
     
@@ -121,8 +129,6 @@ function AES() {
 	  return { iterations, salt };
   }
 
-	
-  
   aes.decrypt = async (encrypted, password, passwordBits) => {
   
     let parts = encrypted.split('.');
@@ -132,9 +138,10 @@ function AES() {
       return val.charCodeAt(0);
     }));
             
-      let key = await aes.generatePBKDF2(password, passwordBits, { salt: salt, iterations: rounds }, ['decrypt']);
+    let bits = await aes.generatePBKDF2(password, passwordBits, { salt: salt, iterations: rounds });
+	let key  = await aes.createGcmKey(bits,  ['decrypt']);
 	  
-    return await aes.decryptByKey(encrypted, key);    
+    return await aes.gcmDecrypt(encrypted, key);    
   };
   
   aes.generatePassphrase = () => {

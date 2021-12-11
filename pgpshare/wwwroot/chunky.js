@@ -34,7 +34,7 @@ var chunky = (function () {
 										reader.readAsArrayBuffer(file.slice(offset, chunkSize + offset));
 									} else {
 										console.log("Done reading file");
-										resolve(true);
+										resolve(file.name);
 									}
 								}
 							};
@@ -102,7 +102,7 @@ var chunky = (function () {
 									if (block.length > 0) {
 										downloadBlock(name, ++part);
 									} else {
-										resolve(true);
+										resolve(fileName);
 									}
 								} catch (error) {
 									reject(error);
@@ -124,15 +124,15 @@ var chunky = (function () {
 		});
 	}
 	
-	function uploadString(folder, file, text) {
+	function uploadString(path, text) {
 		return new Promise(function(resolve, reject) {
 			const xhr = new XMLHttpRequest();
-			xhr.open('POST', '/api/keys/' + folder + '/' + file);
+			xhr.open('POST', path);
 			xhr.setRequestHeader('Content-Type', 'application/octet-stream');
 			xhr.onerror = () => reject(Error("network error"));
 			xhr.onload = async (oEvent) => {
 				if (oEvent.target.status != 200) {
-					reject(Error(folder + "/" + file + " http " + oEvent.target.status));
+					reject(Error(path + " http " + oEvent.target.status));
 				} else {
 					resolve(text);
 				} 
@@ -141,15 +141,15 @@ var chunky = (function () {
 		});
 	}
 	
-	function downloadString(folder, file) {
+	function downloadString(path) {
 		return new Promise(function(resolve, reject) {
 			const xhr = new XMLHttpRequest();
-			xhr.open('GET', '/api/keys/' + folder + '/' + file);
+			xhr.open('GET', path);
 			xhr.responseType = 'arraybuffer';
 			xhr.onerror = () => reject(Error("network error"));
 			xhr.onload = async (oEvent) => {
 				if (oEvent.target.status != 200) {
-					reject(Error(folder + "/" + file + " http " + oEvent.target.status));
+					reject(Error(path + " http " + oEvent.target.status));
 				} else {
 					let buffer = oEvent.target.response;
 					if (buffer) {
@@ -165,6 +165,33 @@ var chunky = (function () {
 		});
 	}
 	
+	function uploadObject(path, object) {
+		return new Promise(function(resolve, reject) {
+			try {
+				const text = JSON.stringify(object);
+				uploadString(path, text)
+					.then(x => resolve(object))
+					.catch(error => reject(error));				
+			} catch(error) {
+				reject(error);
+			}
+		});
+	}
+	
+	function downloadObject(path) {
+		return new Promise(function(resolve, reject) {
+			downloadString(path)
+				.then(text => {
+					try {
+						const object = JSON.parse(text);
+						resolve(object);
+					} catch(error) {
+						reject(error);
+					}					
+				}).catch(error => reject(error));			
+		});
+	}	
+	
 	// public Interface
     return {
         uploadFile: function (file, options) {
@@ -173,11 +200,17 @@ var chunky = (function () {
 		downloadFile: function (fileName, options) {
 			return downloadFileInChunks(fileName, options);
 		},
-		uploadString: function (folder, file, text) {
-            return uploadString(folder, file, text);
+		uploadString: function (path, text) {
+            return uploadString(path, text);
         },
-		downloadString: function (folder, file) {
-            return downloadString(folder, file);
+		downloadString: function (path) {
+            return downloadString(path);
+        },
+		uploadObject: function (path, object) {
+            return uploadObject(path, object);
+        },
+		downloadObject: function (path) {
+            return downloadObject(path);
         }
     };
 })();

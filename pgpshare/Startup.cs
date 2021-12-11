@@ -37,6 +37,7 @@ namespace ApiTest
 
             _logger = nlogLoggerProvider.CreateLogger(typeof(Startup).FullName);
 
+            AES.Hoi();
         }
 
         public IConfiguration Configuration { get; }

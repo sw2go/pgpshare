@@ -30,6 +30,7 @@
 			<p></p>
 			<button class="login" onclick="login(document.getElementById('user').value, document.getElementById('password').value)">Login</button>
 			<button class="login" onclick="createAccount(document.getElementById('user').value, document.getElementById('password').value)">Register</button>
+			<button class="login" onclick="test()">Test</button>
 		</div>
 		<div>
 			<h2>Register</h2>		
@@ -45,13 +46,11 @@
 		</div>		
 		<div>
 			<h2>Download file</h2>
-			<p>Enter the name of a file that has been shared with you</p>
-			<label for="downloadFile"></label>
-			<input type="text" name="downloadFile" id="downloadFile" value="">
+			<p>Choose a file that has been shared with you</p>
 			<div class="loadCommand">
-				<span class="item">
-					<button  onclick="downloadChunkedFile(document.getElementById('downloadFile').value, document.getElementById('user').value, document.getElementById('password').value)">Download</button>
-				</span>				
+				<select class="item" name="files" id="file-select" onclick="downloadOptions()">
+					<option value="">--Please choose a file--</option>
+				</select>			
 				<span id="decryptionProgress" class="progress">-</span>
 			</div>
 			
@@ -108,10 +107,11 @@
 	
 	async function login(userId, password) {		
 		try {
-			let encryptedPassphrase = await chunky.downloadString(userId, "pass");
+			let encryptedPassphrase = await chunky.downloadString("/api/keys/" + userId + "/pass");
 			let keyParams = AES().getKeyParams(encryptedPassphrase);
-			let derivedKey = await AES().generatePBKDF2(password, undefined, keyParams);
-			await AES().decryptByKey(encryptedPassphrase, derivedKey);		
+			let derivedBits = await AES().generatePBKDF2(password, undefined, keyParams);
+			let derivedKey = await AES().createGcmKey(derivedBits);
+			await AES().gcmDecrypt(encryptedPassphrase, derivedKey);		
 			console.log("login succeeded");
             authenticated(userId, derivedKey);
 			displayPage("Main_Page");
@@ -142,18 +142,20 @@
 
 			console.log(userId);
 
-			const oldEncryptedPassphrase = await chunky.downloadString(userId, "pass");
+			const oldEncryptedPassphrase = await chunky.downloadString("/api/keys/" + userId + "/pass");
 			const oldKeyParams = AES().getKeyParams(oldEncryptedPassphrase);
-			const oldDerivedKey = await AES().generatePBKDF2(oldPassword, undefined, oldKeyParams);
-			const passphrase = await AES().decryptByKey(oldEncryptedPassphrase, oldDerivedKey);
+			const oldDerivedBits = await AES().generatePBKDF2(oldPassword, undefined, oldKeyParams);
+			const oldDerivedKey = await AES().createGcmKey(oldDerivedBits);
+			const passphrase = await AES().gcmDecrypt(oldEncryptedPassphrase, oldDerivedKey);
 			
 			// New password-derived key
 			const keyParams = { iterations: 1000000, salt: crypto.getRandomValues(new Uint8Array(32)) };
-			const derivedKey = await AES().generatePBKDF2(newPassword, undefined, keyParams);					
+			const derivedBits = await AES().generatePBKDF2(newPassword, undefined, keyParams);
+            const derivedKey = await AES().createGcmKey(derivedBits);			
 			const iv = crypto.getRandomValues(new Uint8Array(12));		
-			const encryptedPassphrase = AES().setKeyParams(keyParams, await AES().encryptByKey(passphrase, derivedKey, iv));
+			const encryptedPassphrase = AES().setKeyParams(keyParams, await AES().gcmEncrypt(passphrase, derivedKey, iv));
 			
-			await chunky.uploadString(userId, "pass", encryptedPassphrase);
+			await chunky.uploadString("/api/keys/" + userId + "/pass", encryptedPassphrase);
 			
 			await KeyValueDB.set(userId, derivedKey);
 			
@@ -168,7 +170,7 @@
 	async function createAccount(userId, password) {
 		
 		try {
-			let test = await chunky.downloadString(userId, "pass");
+			let test = await chunky.downloadString("/api/keys/" + userId + "/pass");
 			alert('account already exists');
 			return;
 		}
@@ -189,13 +191,15 @@
 			
 			// New password-derived key
 			const keyParams = { iterations: 1000000, salt: crypto.getRandomValues(new Uint8Array(32)) };
-			const derivedKey = await AES().generatePBKDF2(password, undefined, keyParams);
+			const derivedBits = await AES().generatePBKDF2(password, undefined, keyParams);
+			const derivedKey = await AES().createGcmKey(derivedBits);
 			const iv = crypto.getRandomValues(new Uint8Array(12));		
-			const encryptedPassphrase = AES().setKeyParams(keyParams, await AES().encryptByKey(passphrase, derivedKey, iv));
+			const encryptedPassphrase = AES().setKeyParams(keyParams, await AES().gcmEncrypt(passphrase, derivedKey, iv));
 			
-			await chunky.uploadString(userId, "private", pgpKey.privateKey);
-			await chunky.uploadString(userId, "public", pgpKey.publicKey);
-			await chunky.uploadString(userId, "pass", encryptedPassphrase);
+			await chunky.uploadString("/api/keys/" + userId + "/private", pgpKey.privateKey);
+			await chunky.uploadString("/api/keys/" + userId + "/public", pgpKey.publicKey);
+			await chunky.uploadString("/api/keys/" + userId + "/pass", encryptedPassphrase);
+			await chunky.uploadObject("/api/keys/" + userId + "/shared", []);
 			
 			console.log("Account created");			
 			authenticated(userId, derivedKey);
@@ -216,13 +220,14 @@
 	
 	// Upload file
 	async function uploadChunkedFile(file, recipientsString) {
-	
 		try {
 			progessInfo('encryptionProgress', 'loading', 'Start');
+			
+			const oldRecipients = await currentRecipients(file.name);
 	
-			const recipients = recipientsString.trim().split(/[ ,;]+/);
+			const newRecipients = recipientsString.trim().split(/[ ,;]+/);
 		
-			const publicKeys = await Promise.all(recipients.map(recipient => chunky.downloadString(recipient, "public")));
+			const publicKeys = await Promise.all(newRecipients.map(recipient => chunky.downloadString("/api/keys/" + recipient + "/public")));
 		
 			let progress = 0;		
 			progessInfo('encryptionProgress', 'loading', progress.toString() + "  encrypted");
@@ -238,28 +243,94 @@
 				}  
 			}
 		
-			chunky.uploadFile(file, options).then( x => {
+			chunky.uploadFile(file, options).then(async (fileName) => {
 				progessInfo('encryptionProgress', 'complete', progress.toString() + " completed");
+				await updateSharedLists(oldRecipients, newRecipients, fileName);				
 			}).catch(error => {
 				progessInfo('encryptionProgress', 'failed', error);	
 			});
-		
 		} catch (error) {
 			progessInfo('encryptionProgress', 'failed', error);			
 		}
+
 	}
+	
+	async function currentRecipients(fileName) {
+		try {
+			return await chunky.downloadObject("/api/files/" + fileName + "/shared");		
+		} catch (error) {
+			return [];
+		}		
+	}
+	
+	async function updateSharedLists(oldRecipients, newRecipients, fileName) {	
 		
+		const toRemove = oldRecipients.filter(r => !newRecipients.includes(r));		
+		const userId = sessionStorage.getItem('userId');
+	
+		newRecipients.forEach(async function (recipient, i) {
+			let oldShared = await chunky.downloadObject("/api/keys/" + recipient + "/shared");
+			const shared = oldShared.filter(item => !(item.filename == fileName && item.owner == userId));
+			shared.unshift({ filename: fileName, owner: userId });
+			await chunky.uploadObject("/api/keys/" + recipient + "/shared", shared);
+		});
+		
+		toRemove.forEach(async function (recipient, i) {
+			const oldShared = await chunky.downloadObject("/api/keys/" + recipient + "/shared");			
+			const shared = oldShared.filter(item => !(item.filename == fileName && item.owner == userId));
+			await chunky.uploadObject("/api/keys/" + recipient + "/shared", shared);
+		});
+				
+		await chunky.uploadObject("/api/files/" + fileName + "/shared", newRecipients);
+	}
+	
+	async function downloadOptions() {
+	
+		let fileSelect = document.getElementById('file-select');
+	
+		if (fileSelect.selectedIndex == 0 || fileSelect.selectedIndex == sessionStorage.getItem('lastIndex')) {
+			
+			// Fill/refresh download options
+			
+			sessionStorage.setItem('lastIndex', fileSelect.selectedIndex);
+			let shared = await chunky.downloadObject("/api/keys/" + sessionStorage.getItem('userId') + "/shared");
+			
+			let options = fileSelect.options;
+			while (options.length) {
+				options.remove(0);
+			}
+			fileSelect.selectedIndex = 0;
+			options[options.length] = new Option("--Choose a file--", options.length, true, false);
+			
+			shared.forEach(function (row, i) {
+				const option = new Option(row.filename, options.length, false, false);
+				option.data = row;
+				options[options.length] = option;
+			});
+			
+		} else if (fileSelect.selectedIndex > 0 && fileSelect.selectedIndex != sessionStorage.getItem('lastIndex')) {
+			
+			// Download the selected option
+			
+			sessionStorage.setItem('lastIndex', fileSelect.selectedIndex);
+		
+			const row = fileSelect.options[fileSelect.selectedIndex].data;
+								
+			downloadChunkedFile(row.filename, sessionStorage.getItem('userId')).then(x => fileSelect.selectedIndex == 0);  
+		}
+	}
+	
 	// Download file
 	async function downloadChunkedFile(fileName, userId) {
 			
 		try {			
 			progessInfo('decryptionProgress', 'loading', 'Start');
 			
-			const privateKey = await chunky.downloadString(userId, "private");
-			const encryptedPassphrase = await chunky.downloadString(userId, "pass");
+			const privateKey = await chunky.downloadString("/api/keys/" + userId + "/private");
+			const encryptedPassphrase = await chunky.downloadString("/api/keys/" + userId + "/pass");
 			
 			const derivedKey = await KeyValueDB.get(userId);		
-			const passphrase = await AES().decryptByKey(encryptedPassphrase, derivedKey); 
+			const passphrase = await AES().gcmDecrypt(encryptedPassphrase, derivedKey); 
 	
 			let progress = 0;
 			progessInfo('decryptionProgress', 'loading', progress.toString() + "  decrypted");
@@ -321,6 +392,19 @@
 		elem.classList.remove("loading");
 		elem.classList.add(className);
 		elem.innerText = text;
+	}
+	
+	async function test() {
+		// New password-derived key
+		password = "123"
+		passphrase = "ABC";
+		const saltValue = new Uint8Array([38, 233, 174, 43, 157, 103, 101, 212]);
+		const keyParams = { iterations: 1000000, salt: saltValue };
+		const derivedBits = await AES().generatePBKDF2(password, undefined, keyParams);
+		const derivedKey = await AES().createGcmKey(derivedBits);
+		const iv = new Uint8Array([239, 96, 94, 180, 7, 217, 22, 32, 96, 243, 0, 0]);		
+		const encryptedPassphrase = AES().setKeyParams(keyParams, await AES().gcmEncrypt(passphrase, derivedKey, iv));
+		console.log(encryptedPassphrase);
 	}
 	
   </script>

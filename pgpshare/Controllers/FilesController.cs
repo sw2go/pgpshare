@@ -20,9 +20,9 @@ namespace PgpShare.Controllers
             this.helper = helper;
         }
 
-        private string getFilePath(string fileName, int? part = null)
+        private string getFilePath(string fileName, string part = null)
         {
-            return (part == null) ? Path.Combine(helper.FilesPath, fileName) : Path.Combine(helper.FilesPath, fileName, part.Value.ToString());            
+            return (part == null) ? Path.Combine(helper.FilesPath, fileName) : Path.Combine(helper.FilesPath, fileName, part);            
         }
 
 
@@ -50,12 +50,12 @@ namespace PgpShare.Controllers
 
         [HttpPost]
         [Route("{filename}/{part}")]
-        public async Task CreateBlock(string filename, int part)
+        public async Task CreateBlock(string filename, string part)
         {
             var path = getFilePath(filename);
 
             var directory = Directory.CreateDirectory(path);
-            if (part == 0)
+            if (part == "0")
             {
                 foreach (var file in directory.EnumerateFiles())
                 {
@@ -73,7 +73,7 @@ namespace PgpShare.Controllers
 
         [HttpGet]
         [Route("{filename}/{part}")]
-        public async Task GetBlock(string filename, int part)
+        public async Task GetBlock(string filename, string part)
         {
             var filePath = Path.Combine(helper.FilesPath, filename);
 
