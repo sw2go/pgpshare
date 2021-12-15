@@ -21,5 +21,10 @@
     <Folder Remove="wwwroot\data\keys" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="wwwroot\data\files\**\*.*" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot\data\keys\**\*.*" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
 
 </Project>

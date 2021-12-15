@@ -22,6 +22,15 @@ Firefox > Settings > Chronik > "anlegen" (if set to "niemals anlegen" IndexedDB 
 Deployment:
 VisualStudio > Project > Publish to folder
 
+Hint:
+Section in *.csproj to avoid publishing 'test-data' from localhost 
+
+  <ItemGroup>
+    <Content Update="wwwroot\data\files\**\*.*" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot\data\keys\**\*.*" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+
 Target-System:
 Set permission for web-server process on wwwroot/data to 'full control'
 When hosted in IIS remove WebDAVModule in web.config (to allow DELETE method)
