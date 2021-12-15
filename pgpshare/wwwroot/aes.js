@@ -161,5 +161,16 @@ function AES() {
     )
   };
   
+  aes.generateSha256 = async (message) => {
+
+		// hash the message
+		const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(message));
+		
+		return btoa(Array.from(new Uint8Array(hashBuffer)).map(val => {
+			console.log(val);
+			return String.fromCharCode(val);
+		}).join(''));
+	}
+  
   return aes;
 }

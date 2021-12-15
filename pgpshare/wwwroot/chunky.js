@@ -2,7 +2,7 @@
 
 var chunky = (function () {
 			
-	function uploadFileInChunks(file, options) {
+	function uploadFileInChunks(path, file, options) {
 		return new Promise(function(resolve, reject) {			
 			try {
 				
@@ -23,12 +23,12 @@ var chunky = (function () {
 							offset += block.length;
 							
 							const xhr = new XMLHttpRequest();
-							xhr.open('POST', '/api/files/' + file.name + '/' + part++);
+							xhr.open('POST', path + '/' + part++);
 							xhr.setRequestHeader('Content-Type', 'application/octet-stream');
 							xhr.onerror = () => reject(Error("network error"));
 							xhr.onload = (oEvent) => {
 								if (oEvent.target.status != 200) {
-									reject(Error(file.name + "/" + part + " http " + oEvent.target.status));								
+									reject(Error(path + "/" + part + " http " + oEvent.target.status));								
 								} else {
 									if (offset < fileSize) {
 										reader.readAsArrayBuffer(file.slice(offset, chunkSize + offset));
@@ -62,7 +62,7 @@ var chunky = (function () {
 		});		
 	};
 	
-	function downloadFileInChunks(fileName, options) {
+	function downloadFileInChunks(path, fileName, options) {
 		return new Promise(function(resolve, reject) {			
 			try {
 				
@@ -85,14 +85,14 @@ var chunky = (function () {
 					}
 				};
 				
-				const downloadBlock = async function (name, part) {
+				const downloadBlock = async function (path, part) {
 					const xhr = new XMLHttpRequest();
-					xhr.open('GET', '/api/files/' + name + '/' + part);
+					xhr.open('GET', path + '/' + part);
 					xhr.responseType = 'arraybuffer';
 					xhr.onerror = () => reject(Error("network error"));
 					xhr.onload = async (oEvent) => {
 						if (oEvent.target.status != 200) {
-							reject(Error(name + "/" + part + " http " + oEvent.target.status));					
+							reject(Error(path + "/" + part + " http " + oEvent.target.status));					
 						} else {
 							let buffer = oEvent.target.response;
 							if (buffer) {
@@ -100,7 +100,7 @@ var chunky = (function () {
 									let block = new Uint8Array(buffer);
 									await writeBlock(block);
 									if (block.length > 0) {
-										downloadBlock(name, ++part);
+										downloadBlock(path, ++part);
 									} else {
 										resolve(fileName);
 									}
@@ -116,7 +116,7 @@ var chunky = (function () {
 				};
 				
 				// start downloading the first block from the server
-				downloadBlock(fileName, 0);				
+				downloadBlock(path, 0);				
 				
 			} catch (error) {
 				reject(error);
@@ -194,11 +194,11 @@ var chunky = (function () {
 	
 	// public Interface
     return {
-        uploadFile: function (file, options) {
-            return uploadFileInChunks(file, options);
+        uploadFile: function (path, file, options) {
+            return uploadFileInChunks(path, file, options);
         },		
-		downloadFile: function (fileName, options) {
-			return downloadFileInChunks(fileName, options);
+		downloadFile: function (path, fileName, options) {
+			return downloadFileInChunks(path, fileName, options);
 		},
 		uploadString: function (path, text) {
             return uploadString(path, text);

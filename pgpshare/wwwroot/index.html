@@ -219,11 +219,14 @@
 
 	
 	// Upload file
-	async function uploadChunkedFile(file, recipientsString) {
+	async function uploadChunkedFile(localFile, recipientsString) {
 		try {
+		
+			const serverFileName = (await AES().generateSha256(sessionStorage.getItem('userId') + "|" + localFile.name)).replaceAll('/', '.').replaceAll('=', '').replaceAll('+', '-');
+					
 			progessInfo('encryptionProgress', 'loading', 'Start');
 			
-			const oldRecipients = await currentRecipients(file.name);
+			const oldRecipients = await currentRecipients(serverFileName);
 	
 			const newRecipients = recipientsString.trim().split(/[ ,;]+/);
 		
@@ -243,9 +246,9 @@
 				}  
 			}
 		
-			chunky.uploadFile(file, options).then(async (fileName) => {
+			chunky.uploadFile('/api/files/' + serverFileName, localFile, options).then(async (localFileName) => {
 				progessInfo('encryptionProgress', 'complete', progress.toString() + " completed");
-				await updateSharedLists(oldRecipients, newRecipients, fileName);				
+				await updateSharedLists(oldRecipients, newRecipients, serverFileName, localFileName);				
 			}).catch(error => {
 				progessInfo('encryptionProgress', 'failed', error);	
 			});
@@ -255,33 +258,33 @@
 
 	}
 	
-	async function currentRecipients(fileName) {
+	async function currentRecipients(serverFileName) {
 		try {
-			return await chunky.downloadObject("/api/files/" + fileName + "/shared");		
+			return await chunky.downloadObject("/api/files/" + serverFileName + "/shared");		
 		} catch (error) {
 			return [];
 		}		
 	}
 	
-	async function updateSharedLists(oldRecipients, newRecipients, fileName) {	
+	async function updateSharedLists(oldRecipients, newRecipients, serverFileName, localFileName) {	
 		
 		const toRemove = oldRecipients.filter(r => !newRecipients.includes(r));		
 		const userId = sessionStorage.getItem('userId');
 	
 		newRecipients.forEach(async function (recipient, i) {
 			let oldShared = await chunky.downloadObject("/api/keys/" + recipient + "/shared");
-			const shared = oldShared.filter(item => !(item.filename == fileName && item.owner == userId));
-			shared.unshift({ filename: fileName, owner: userId });
+			const shared = oldShared.filter(item => item.serverFileName != serverFileName);
+			shared.unshift({ serverFileName: serverFileName, localFileName: localFileName, owner: userId });
 			await chunky.uploadObject("/api/keys/" + recipient + "/shared", shared);
 		});
 		
 		toRemove.forEach(async function (recipient, i) {
 			const oldShared = await chunky.downloadObject("/api/keys/" + recipient + "/shared");			
-			const shared = oldShared.filter(item => !(item.filename == fileName && item.owner == userId));
+			const shared = oldShared.filter(item => !(item.serverFileName == serverFileName));
 			await chunky.uploadObject("/api/keys/" + recipient + "/shared", shared);
 		});
 				
-		await chunky.uploadObject("/api/files/" + fileName + "/shared", newRecipients);
+		await chunky.uploadObject("/api/files/" + serverFileName + "/shared", newRecipients);
 	}
 	
 	async function downloadOptions() {
@@ -303,7 +306,7 @@
 			options[options.length] = new Option("--Choose a file--", options.length, true, false);
 			
 			shared.forEach(function (row, i) {
-				const option = new Option(row.filename, options.length, false, false);
+				const option = new Option(row.localFileName, options.length, false, false);
 				option.data = row;
 				options[options.length] = option;
 			});
@@ -316,12 +319,12 @@
 		
 			const row = fileSelect.options[fileSelect.selectedIndex].data;
 								
-			downloadChunkedFile(row.filename, sessionStorage.getItem('userId')).then(x => fileSelect.selectedIndex == 0);  
+			downloadChunkedFile(row.serverFileName, row.localFileName, sessionStorage.getItem('userId')).then(x => fileSelect.selectedIndex == 0);  
 		}
 	}
 	
 	// Download file
-	async function downloadChunkedFile(fileName, userId) {
+	async function downloadChunkedFile(serverFileName, localFileName, userId) {
 			
 		try {			
 			progessInfo('decryptionProgress', 'loading', 'Start');
@@ -347,7 +350,7 @@
 				}
 			}
 		
-			chunky.downloadFile(fileName, options).then( x => {
+			chunky.downloadFile("/api/files/" + serverFileName, localFileName, options).then( x => {
 				progessInfo('decryptionProgress', 'complete', progress.toString() + "  completed");
 			}).catch(error => {
 				progessInfo('decryptionProgress', 'failed', error);
