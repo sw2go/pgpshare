@@ -30,7 +30,6 @@
 			<p></p>
 			<button class="login" onclick="login(document.getElementById('user').value, document.getElementById('password').value)">Login</button>
 			<button class="login" onclick="createAccount(document.getElementById('user').value, document.getElementById('password').value)">Register</button>
-			<button class="login" onclick="test()">Test</button>
 		</div>
 		<div>
 			<h2>Register</h2>		
@@ -48,9 +47,11 @@
 			<h2>Download file</h2>
 			<p>Choose a file that has been shared with you</p>
 			<div class="loadCommand">
-				<select class="item" name="files" id="file-select" onclick="downloadOptions()">
-					<option value="">--Please choose a file--</option>
-				</select>			
+				<div class="item">
+					<button  id="file-download" onclick="downloadOptions()">Choose file</button>
+					<select  name="files" id="file-select" style="display: none" onchange="optionSelected()">
+					</select>			
+				</div>
 				<span id="decryptionProgress" class="progress">-</span>
 			</div>
 			
@@ -289,21 +290,22 @@
 	
 	async function downloadOptions() {
 	
+		let fileDnload = document.getElementById('file-download');
 		let fileSelect = document.getElementById('file-select');
-	
-		if (fileSelect.selectedIndex == 0 || fileSelect.selectedIndex == sessionStorage.getItem('lastIndex')) {
-			
-			// Fill/refresh download options
-			
-			sessionStorage.setItem('lastIndex', fileSelect.selectedIndex);
-			let shared = await chunky.downloadObject("/api/keys/" + sessionStorage.getItem('userId') + "/shared");
-			
-			let options = fileSelect.options;
-			while (options.length) {
-				options.remove(0);
-			}
+		let options = fileSelect.options;
+		
+		// Fill/refresh download options
+				
+		sessionStorage.setItem('lastIndex', -1);
+		let shared = await chunky.downloadObject("/api/keys/" + sessionStorage.getItem('userId') + "/shared");
+		
+		if (shared.length == 0) {
+			alert("No files found");
+		} else {
+			fileDnload.style.display = "none";
+		
 			fileSelect.selectedIndex = 0;
-			options[options.length] = new Option("--Choose a file--", options.length, true, false);
+			options[options.length] = new Option("Select ...", options.length, true, false);
 			
 			shared.forEach(function (row, i) {
 				const option = new Option(row.localFileName, options.length, false, false);
@@ -311,15 +313,45 @@
 				options[options.length] = option;
 			});
 			
-		} else if (fileSelect.selectedIndex > 0 && fileSelect.selectedIndex != sessionStorage.getItem('lastIndex')) {
+			fileSelect.style.display = "inline-block";
+		}
+	}
+	
+	
+	async function optionSelected() {
+	
+		let fileDnload = document.getElementById('file-download');
+		let fileSelect = document.getElementById('file-select');
+			console.log(fileSelect.selectedIndex);
+			console.log(sessionStorage.getItem('lastIndex'));
+		if (fileSelect.selectedIndex > 0) {
 			
 			// Download the selected option
+			let idx = fileSelect.selectedIndex;
+						
+			sessionStorage.setItem('lastIndex', idx);
+			let options = fileSelect.options;
+			const row = options[idx].data;
+
+			hideSelection();
 			
-			sessionStorage.setItem('lastIndex', fileSelect.selectedIndex);
-		
-			const row = fileSelect.options[fileSelect.selectedIndex].data;
-								
-			downloadChunkedFile(row.serverFileName, row.localFileName, sessionStorage.getItem('userId')).then(x => fileSelect.selectedIndex == 0);  
+			downloadChunkedFile(row.serverFileName, row.localFileName, sessionStorage.getItem('userId'))
+				.then(x => fileDnload.style.display = "inline" )
+				.catch(x => fileDnload.style.display = "inline");  
+		} else if (fileSelect.selectedIndex == 0 && sessionStorage.getItem('lastIndex') == -1) {
+			sessionStorage.setItem('lastIndex', 0);
+		} else if (fileSelect.selectedIndex == 0 && sessionStorage.getItem('lastIndex') == "0") {
+			hideSelection();
+			fileDnload.style.display = "inline"
+		}
+	}
+	
+	function hideSelection() {
+		let fileSelect = document.getElementById('file-select');
+		fileSelect.style.display = "none";
+		let options = fileSelect.options;
+		while (options.length) {
+			options.remove(0);
 		}
 	}
 	
