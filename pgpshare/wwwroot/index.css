@@ -8,6 +8,10 @@ h2 {
 	margin-top: 16px;
 }
 
+select, input, p, button, input[type=file]::file-selector-button {
+	font-size: 16px;	
+}
+
 .head {
 	display: flex;
 	align-items: center;
