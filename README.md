@@ -47,3 +47,7 @@ https://www.scottbrady91.com/pake/srp-in-csharp-and-dotnet-core
 
 More words for online-research in the future:
 merkle-tree, verifiable random function
+
+merkle vs. verkle
+https://vitalik.ca/general/2021/06/18/verkle.html
+https://www.youtube.com/watch?v=RGJOQHzg3UQ (Dankrad Feist)
