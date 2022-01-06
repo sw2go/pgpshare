@@ -45,4 +45,5 @@ Secure Remote Password: (used by Protonmail, 1Password)
 https://medium.com/swlh/what-is-secure-remote-password-srp-protocol-and-how-to-use-it-70e415b94a76
 https://www.scottbrady91.com/pake/srp-in-csharp-and-dotnet-core                      
 
-
+More words for online-research in the future:
+merkle-tree, verifiable random function

@@ -208,11 +208,31 @@
 		}
 		catch (error) {
 			alert("failed");
-		}
-	
+		}	
 	}
 	
-	 function deleteFile() {
+	async function getPrivateKey() {
+		const userId = sessionStorage.getItem('userId');
+		const privateKeyArmored = await chunky.downloadString("/api/keys/" + userId + "/private");
+		const encryptedPassphrase = await chunky.downloadString("/api/keys/" + userId + "/pass");			
+		const derivedKey = await KeyValueDB.get(userId);		
+
+		const key = await openpgp.decryptKey({
+			privateKey: await openpgp.readPrivateKey({ armoredKey: privateKeyArmored }), 
+			passphrase: await AES().gcmDecrypt(encryptedPassphrase, derivedKey)
+		});	
+		console.log(key);
+		return key;
+	}
+	
+	async function getPublicKey(userId) {
+		const publicKeyArmored = await chunky.downloadString("/api/keys/" + userId + "/public");
+		const key = await openpgp.readKey({ armoredKey: publicKeyArmored });
+		console.log(key);
+		return key;
+	}
+	
+	function deleteFile() {
         let xhr = new XMLHttpRequest();
         xhr.open('DELETE', '/api/files/*');
         xhr.send();
@@ -233,6 +253,10 @@
 		
 			const publicKeys = await Promise.all(newRecipients.map(recipient => chunky.downloadString("/api/keys/" + recipient + "/public")));
 			
+			const publicKeysdd = await Promise.all(newRecipients.map(recipient => getPublicKey(recipient)));
+			
+
+			
 			const signingKey = await getPrivateKey();
 
 		
@@ -246,7 +270,7 @@
 					progress += block.length;
 					progessInfo('encryptionProgress', 'loading', progress.toString() + "  encrypted");
 										
-					return encryptor(block, publicKeys, signingKey); 
+					return encryptor(block, publicKeysdd, signingKey); 
 				}  
 			}
 		
@@ -293,13 +317,11 @@
 	
 	async function downloadOptions() {
 	
-		let fileDnload = document.getElementById('file-download');
-		let fileSelect = document.getElementById('file-select');
-		let options = fileSelect.options;
+		const fileDnload = document.getElementById('file-download');
+		const fileSelect = document.getElementById('file-select');
+		const options = fileSelect.options;
 		
-		// Fill/refresh download options
-				
-		sessionStorage.setItem('lastIndex', -1);
+		// download array containing meta-info to the files that have been shared with you				
 		let shared = await chunky.downloadObject("/api/keys/" + sessionStorage.getItem('userId') + "/shared");
 		
 		if (shared.length == 0) {
@@ -311,7 +333,7 @@
 			options[options.length] = new Option("Select ...", options.length, true, false);
 			
 			shared.forEach(function (row, i) {
-				const option = new Option(row.localFileName, options.length, false, false);
+				const option = new Option(row.owner + ": " + row.localFileName, options.length, false, false);
 				option.data = row;
 				options[options.length] = option;
 			});
@@ -323,29 +345,18 @@
 	
 	
 	async function optionSelected() {
-		let fileDnload = document.getElementById('file-download');
 		let fileSelect = document.getElementById('file-select');
 			console.log(fileSelect.selectedIndex);
-			console.log(sessionStorage.getItem('lastIndex'));
+			//console.log(sessionStorage.getItem('lastIndex'));
 		if (fileSelect.selectedIndex > 0) {
 			
-			// Download the selected option
-			let idx = fileSelect.selectedIndex;
-						
-			sessionStorage.setItem('lastIndex', idx);
-			let options = fileSelect.options;
-			const row = options[idx].data;
+			// fetch meta-info
+			const row = fileSelect.options[fileSelect.selectedIndex].data;
 
-			hideSelection(false);
-			
-			downloadChunkedFile(row.serverFileName, row.localFileName, sessionStorage.getItem('userId'))
-				.then(x => fileDnload.style.display = "inline" )
-				.catch(x => fileDnload.style.display = "inline");  
-		} else if (fileSelect.selectedIndex == 0 && sessionStorage.getItem('lastIndex') == -1) {
-			sessionStorage.setItem('lastIndex', 0);
-		} else if (fileSelect.selectedIndex == 0 && sessionStorage.getItem('lastIndex') == "0") {
-			hideSelection(true);
-			
+			hideSelection(false);			
+			downloadChunkedFile(row.serverFileName, row.localFileName, row.owner)
+				.then(x => hideSelection(true))
+				.catch(x => hideSelection(true));  
 		}
 	}
 	
@@ -361,29 +372,15 @@
 			fileDnload.style.display = "inline";		
 		}
 	}
-	
-	async function getPrivateKey() {
-		const userId = sessionStorage.getItem('userId');
-		const privateKeyArmored = await chunky.downloadString("/api/keys/" + userId + "/private");
-		const encryptedPassphrase = await chunky.downloadString("/api/keys/" + userId + "/pass");			
-		const derivedKey = await KeyValueDB.get(userId);		
-
-		return await openpgp.decryptKey({
-			privateKey: await openpgp.readPrivateKey({ armoredKey: privateKeyArmored }), 
-			passphrase: await AES().gcmDecrypt(encryptedPassphrase, derivedKey)
-		});	
-	}
-	
-	
-	
-	
+		
 	// Download file
-	async function downloadChunkedFile(serverFileName, localFileName, userId) {
+	async function downloadChunkedFile(serverFileName, localFileName, owner) {
 			
 		try {			
 			progessInfo('decryptionProgress', 'loading', 'Start');
 		
-			const privateKey = await getPrivateKey();
+			const privateKey = await getPrivateKey();			
+			const verificationKey = await getPublicKey(owner);
 	
 			let progress = 0;
 			progessInfo('decryptionProgress', 'loading', progress.toString() + "  decrypted");
@@ -391,7 +388,7 @@
 			const options = { 
 				decoder: async (block) =>  {
 
-					let decrypted = await decryptor(block, privateKey);
+					let decrypted = await decryptor(block, privateKey, verificationKey);
 					
 					progress += decrypted.length;
 					progessInfo('decryptionProgress', 'loading', progress.toString() + "  decrypted");
@@ -412,14 +409,11 @@
 		
 	}
 	
-	async function encryptor(block, publicKeysArmored, privateKey) {	
-			
-		const publicKeys = await Promise.all(publicKeysArmored.map(armoredKey => openpgp.readKey({ armoredKey })));
-	
+	async function encryptor(block, publicKeys, privateKey) {
 		encrypted = await openpgp.encrypt({
 			message: await openpgp.createMessage({ binary: block }),
 			encryptionKeys: publicKeys,
-			signingKeys: privateKey, // optional,
+			signingKeys: privateKey, // optional
 			format: 'binary',
 			config: { preferredCompressionAlgorithm: openpgp.enums.compression.zlib }
 		});		
@@ -427,14 +421,21 @@
 		return encrypted;
 	}
 	
-	async function decryptor(block, privateKey) {	
+	async function decryptor(block, privateKey, verificationKey) {	
 
 		const { data: decrypted, signatures } = await openpgp.decrypt({
 			message: await openpgp.readMessage({ binaryMessage: block }),
+			verificationKeys: verificationKey, // optional
 			decryptionKeys: privateKey,
 			format: 'binary' // output as Uint8Array
 		});
 		
+		try {
+			await signatures[0].verified; // throws on invalid signature
+			console.log('Signature is valid');
+		} catch (e) {
+			throw new Error('Signature could not be verified: ' + e.message);
+		}
 		return decrypted;
 	}
 	
