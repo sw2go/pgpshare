@@ -51,3 +51,9 @@ merkle-tree, verifiable random function
 merkle vs. verkle
 https://vitalik.ca/general/2021/06/18/verkle.html
 https://www.youtube.com/watch?v=RGJOQHzg3UQ (Dankrad Feist)
+
+verifiable random function
+https://research.nccgroup.com/2020/04/03/exploring-verifiable-random-functions-in-code/
+https://tools.ietf.org/id/draft-irtf-cfrg-vrf-06.html
+https://github.com/r2ishiguro/vrf
+https://github.com/aergoio/secp256k1-vrf
